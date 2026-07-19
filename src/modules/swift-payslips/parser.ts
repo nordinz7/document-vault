@@ -123,7 +123,7 @@ export function parseLines(lines: Line[]): Payslip {
       continue;
     }
 
-    const item: PayslipLineItem = { label, amount: parseAmount(value) };
+    const item: PayslipLineItem = { label, amount: parseAmount(label.startsWith('NPL DAYS') ? value.split(' ')[value.split(' ').length-1]||'' :value) };
     if (label.startsWith("YTD")) {
       yearToDate.push(item);
     } else if (label.startsWith("Employer")) {
