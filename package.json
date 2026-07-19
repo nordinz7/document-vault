@@ -1,0 +1,20 @@
+{
+  "name": "document-vault",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun run --hot index.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "pdfjs-dist": "^6.1.200"
+  },
+  "packageManager": "bun@latest"
+}
