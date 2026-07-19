@@ -6,17 +6,9 @@ import type {
   PayslipRecord,
 } from "./schema.ts";
 
-/**
- * Data access for payslips. This is the ONLY layer that knows column names
- * and that money is stored as integer cents — everything above works in
- * Ringgit numbers. SQL strings are passed to db.query(), which caches the
- * prepared statement per query text.
- */
-
 const toCents = (ringgit: number): number => Math.round(ringgit * 100);
 const toRinggit = (cents: number): number => cents / 100;
 
-/** Raw row as stored in SQLite. */
 interface PayslipRow {
   id: number;
   employee_id: number;
@@ -38,10 +30,10 @@ function mapRow(row: PayslipRow): PayslipRecord {
     id: row.id,
     employeeId: row.employee_id,
     period: row.period,
-    earnings: JSON.parse(row.earnings) as PayslipLineItem[],
-    deductions: JSON.parse(row.deductions) as PayslipLineItem[],
-    employerContributions: JSON.parse(row.employer_contributions) as PayslipLineItem[],
-    yearToDate: JSON.parse(row.year_to_date) as PayslipLineItem[],
+    earnings: JSON.parse(row.earnings || "[]") as PayslipLineItem[],
+    deductions: JSON.parse(row.deductions || "[]") as PayslipLineItem[],
+    employerContributions: JSON.parse(row.employer_contributions || "[]") as PayslipLineItem[],
+    yearToDate: JSON.parse(row.year_to_date || "[]") as PayslipLineItem[],
     grossPay: toRinggit(row.gross_pay_cents),
     nettPay: toRinggit(row.nett_pay_cents),
     hash: row.hash,
@@ -51,7 +43,6 @@ function mapRow(row: PayslipRow): PayslipRecord {
   };
 }
 
-/** Insert or update the employee identified by its employee number; return its id. */
 export function upsertEmployee(h: PayslipHeader): number {
   const row = db
     .query(
@@ -80,10 +71,6 @@ export function upsertEmployee(h: PayslipHeader): number {
   return row.id;
 }
 
-/**
- * Store a payslip. If a record for this (employee, period) already exists the
- * insert is a no-op and the existing record is returned.
- */
 export function insertPayslip(
   employeeId: number,
   payslip: Payslip,
@@ -113,7 +100,6 @@ export function insertPayslip(
       path,
     }) as PayslipRow | null;
 
-  // ON CONFLICT DO NOTHING returns no row when the period already exists.
   return row ? mapRow(row) : findByEmployeeAndPeriod(employeeId, payslip.header.period)!;
 }
 
@@ -141,13 +127,11 @@ export function findPayslipById(id: number): PayslipRecord | null {
   return row ? mapRow(row) : null;
 }
 
-/** Filters for {@link findPayslips}. All are optional and combined with AND. */
 export interface PayslipFilter {
   period?: string;
   employeeNo?: string;
 }
 
-/** List payslips, optionally filtered by period and/or employee number. */
 export function findPayslips(filter: PayslipFilter = {}): PayslipRecord[] {
   const clauses: string[] = [];
   const params: Record<string, string> = {};
