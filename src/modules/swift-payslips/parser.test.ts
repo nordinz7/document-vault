@@ -3,10 +3,6 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { parsePayslip } from "./parser.ts";
 
-// These tests run against a real, private payslip fixture that must NOT be
-// committed (it contains PII). Provide it locally at fixtures/PAYSLIP.pdf and
-// set PAYSLIP_TEST_PASSWORD (e.g. in a .env file). When either is absent the
-// tests are skipped rather than failing, so CI stays green without the secret.
 const PDF_PATH = join(import.meta.dir, "fixtures", "PAYSLIP.pdf");
 const PASSWORD = process.env.PAYSLIP_TEST_PASSWORD;
 

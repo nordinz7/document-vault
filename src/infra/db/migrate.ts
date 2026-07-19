@@ -4,11 +4,6 @@ import db from "./index.ts";
 
 const MIGRATIONS_DIR = join(import.meta.dir, "migrations");
 
-/**
- * Apply any migration files not yet recorded, in filename order.
- * Each migration runs inside a transaction and is recorded in `_migrations`,
- * so re-running is a no-op. Call this once at application startup.
- */
 export function migrate(): void {
   db.run(`
     CREATE TABLE IF NOT EXISTS _migrations (

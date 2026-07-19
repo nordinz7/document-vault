@@ -1,13 +1,8 @@
 import * as service from "./service.ts";
 
-/** JSON error body — a stable shape for programmatic (e.g. MCP) callers. */
 const error = (message: string, status: number): Response =>
   Response.json({ error: message }, { status });
 
-/**
- * GET /payslips — list payslips, optionally filtered.
- * Query params: `period` (e.g. END-JUNE-2026), `employeeNo` (e.g. PK911).
- */
 export const list = (req: Bun.BunRequest<"/payslips">): Response => {
   try {
     const url = new URL(req.url);
@@ -22,7 +17,6 @@ export const list = (req: Bun.BunRequest<"/payslips">): Response => {
   }
 };
 
-/** GET /payslips/:id — fetch a single payslip by id. */
 export const getOne = (req: Bun.BunRequest<"/payslips/:id">): Response => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) {
@@ -37,15 +31,6 @@ export const getOne = (req: Bun.BunRequest<"/payslips/:id">): Response => {
   }
 };
 
-/**
- * POST /payslips — upload one or more payslip PDFs (multipart/form-data).
- * Fields: `file` (the PDF; repeat the field to upload several at once),
- * optional `password` for encrypted PDFs (applied to every file).
- *
- * A single file returns the created record (201). Multiple files return a
- * per-file results array (207 Multi-Status) so one bad PDF doesn't fail the
- * whole batch; the array preserves the order the files were sent in.
- */
 export const upload = async (req: Bun.BunRequest<"/payslips">): Promise<Response> => {
   let form: FormData;
   try {
@@ -67,13 +52,11 @@ export const upload = async (req: Bun.BunRequest<"/payslips">): Promise<Response
     return service.importPayslip(pdf, file.name, password);
   };
 
-  // Backward-compatible fast path: one file behaves exactly as before.
   if (files.length === 1) {
     try {
       const record = await importOne(files[0]!);
       return Response.json(record, { status: 201 });
     } catch (err) {
-      // A PDF we can't parse/decrypt is a client problem, not a server fault.
       console.error("POST /payslips failed:", err);
       const message = err instanceof Error ? err.message : "Could not process PDF";
       return error(message, 422);
