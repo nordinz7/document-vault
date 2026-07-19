@@ -38,8 +38,13 @@ export const getOne = (req: Bun.BunRequest<"/payslips/:id">): Response => {
 };
 
 /**
- * POST /payslips — upload a payslip PDF (multipart/form-data).
- * Fields: `file` (the PDF), optional `password` for encrypted PDFs.
+ * POST /payslips — upload one or more payslip PDFs (multipart/form-data).
+ * Fields: `file` (the PDF; repeat the field to upload several at once),
+ * optional `password` for encrypted PDFs (applied to every file).
+ *
+ * A single file returns the created record (201). Multiple files return a
+ * per-file results array (207 Multi-Status) so one bad PDF doesn't fail the
+ * whole batch; the array preserves the order the files were sent in.
  */
 export const upload = async (req: Bun.BunRequest<"/payslips">): Promise<Response> => {
   let form: FormData;
@@ -49,24 +54,42 @@ export const upload = async (req: Bun.BunRequest<"/payslips">): Promise<Response
     return error("Expected multipart/form-data body", 400);
   }
 
-  const file = form.get("file");
-  if (!(file instanceof File)) {
+  const files = form.getAll("file").filter((f): f is File => f instanceof File);
+  if (files.length === 0) {
     return error("Missing 'file' field", 400);
   }
-  const password = form.get("password");
+  const passwordField = form.get("password");
+  const password =
+    typeof passwordField === "string" && passwordField ? passwordField : undefined;
 
-  try {
+  const importOne = async (file: File) => {
     const pdf = new Uint8Array(await file.arrayBuffer());
-    const record = await service.importPayslip(
-      pdf,
-      file.name,
-      typeof password === "string" && password ? password : undefined,
-    );
-    return Response.json(record, { status: 201 });
-  } catch (err) {
-    // A PDF we can't parse/decrypt is a client problem, not a server fault.
-    console.error("POST /payslips failed:", err);
-    const message = err instanceof Error ? err.message : "Could not process PDF";
-    return error(message, 422);
+    return service.importPayslip(pdf, file.name, password);
+  };
+
+  // Backward-compatible fast path: one file behaves exactly as before.
+  if (files.length === 1) {
+    try {
+      const record = await importOne(files[0]!);
+      return Response.json(record, { status: 201 });
+    } catch (err) {
+      // A PDF we can't parse/decrypt is a client problem, not a server fault.
+      console.error("POST /payslips failed:", err);
+      const message = err instanceof Error ? err.message : "Could not process PDF";
+      return error(message, 422);
+    }
   }
+
+  const results = await Promise.all(
+    files.map(async (file) => {
+      try {
+        return { filename: file.name, status: 201, record: await importOne(file) };
+      } catch (err) {
+        console.error(`POST /payslips failed for ${file.name}:`, err);
+        const message = err instanceof Error ? err.message : "Could not process PDF";
+        return { filename: file.name, status: 422, error: message };
+      }
+    }),
+  );
+  return Response.json(results, { status: 207 });
 };
