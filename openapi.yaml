@@ -1,0 +1,194 @@
+openapi: 3.1.0
+info:
+  title: Document Vault — Swift Payslips API
+  version: 1.0.0
+  description: |
+    Ingests Swift Haulage payslip PDFs, parses them into structured records,
+    and stores them in a local SQLite database.
+
+    **Money** is returned in Ringgit (numbers). Deductions are kept **negative**
+    exactly as printed on the payslip.
+
+    **Idempotency** — importing is idempotent two ways: by SHA-256 hash of the
+    raw PDF bytes (re-uploading identical bytes returns the stored record), and
+    by `UNIQUE(employee_id, period)`.
+servers:
+  - url: http://localhost:3000
+    description: Local dev server
+
+paths:
+  /:
+    get:
+      summary: Health check
+      operationId: health
+      responses:
+        "200":
+          description: Service is up
+          content:
+            text/plain:
+              schema: { type: string, example: OK }
+
+  /payslips:
+    get:
+      summary: List payslips
+      operationId: listPayslips
+      parameters:
+        - name: period
+          in: query
+          required: false
+          description: Filter by pay period (e.g. "2026-06")
+          schema: { type: string }
+        - name: employeeNo
+          in: query
+          required: false
+          description: Filter by employee number
+          schema: { type: string }
+      responses:
+        "200":
+          description: Matching payslip records (order not guaranteed)
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PayslipRecord" }
+        "500": { $ref: "#/components/responses/Error" }
+    post:
+      summary: Upload one or more payslip PDFs
+      operationId: uploadPayslips
+      description: |
+        Send one or more PDFs in the repeated `file` form field.
+
+        - **One file** → `201` with the created (or existing) record.
+        - **Multiple files** → `207` with a per-file results array (order
+          preserved) so one bad PDF doesn't fail the batch.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: array
+                  items: { type: string, format: binary }
+                  description: One or more payslip PDF files (repeat the field)
+                password:
+                  type: string
+                  description: Password for encrypted PDFs (applied to all files)
+      responses:
+        "201":
+          description: Single file imported
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PayslipRecord" }
+        "207":
+          description: Multiple files — per-file results
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/BulkResult" }
+        "400": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /payslips/{id}:
+    get:
+      summary: Get a payslip by id
+      operationId: getPayslip
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: The payslip record
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PayslipRecord" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "500": { $ref: "#/components/responses/Error" }
+
+components:
+  responses:
+    Error:
+      description: Error response
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+
+    LineItem:
+      type: object
+      required: [label, amount]
+      properties:
+        label: { type: string, example: BASIC SALARY }
+        amount:
+          type: number
+          description: Ringgit; deductions are negative.
+          example: 5000
+
+    PayslipRecord:
+      type: object
+      required:
+        - id
+        - employeeId
+        - period
+        - earnings
+        - grossPay
+        - deductions
+        - nettPay
+        - employerContributions
+        - yearToDate
+        - hash
+        - path
+        - createdAt
+        - updatedAt
+      properties:
+        id: { type: integer, example: 1 }
+        employeeId: { type: integer, example: 1 }
+        period: { type: string, example: "2026-06" }
+        earnings:
+          type: array
+          items: { $ref: "#/components/schemas/LineItem" }
+        grossPay: { type: number, example: 6000 }
+        deductions:
+          type: array
+          items: { $ref: "#/components/schemas/LineItem" }
+        nettPay: { type: number, example: 5200 }
+        employerContributions:
+          type: array
+          items: { $ref: "#/components/schemas/LineItem" }
+        yearToDate:
+          type: array
+          items: { $ref: "#/components/schemas/LineItem" }
+        hash:
+          type: string
+          description: SHA-256 of the raw PDF bytes.
+        path:
+          type: string
+          description: Original uploaded filename.
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    BulkResult:
+      type: object
+      required: [filename, status]
+      properties:
+        filename: { type: string }
+        status:
+          type: integer
+          description: 201 on success, 422 on failure.
+          example: 201
+        record: { $ref: "#/components/schemas/PayslipRecord" }
+        error:
+          type: string
+          description: Present when status is 422.
