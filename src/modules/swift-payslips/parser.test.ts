@@ -1,16 +1,29 @@
 import { expect, test } from "bun:test";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { parsePayslip } from "./parser.ts";
 
-const PDF_PATH = join(import.meta.dir, "PAYSLIP.pdf");
-const PASSWORD = "065717";
+// These tests run against a real, private payslip fixture that must NOT be
+// committed (it contains PII). Provide it locally at fixtures/PAYSLIP.pdf and
+// set PAYSLIP_TEST_PASSWORD (e.g. in a .env file). When either is absent the
+// tests are skipped rather than failing, so CI stays green without the secret.
+const PDF_PATH = join(import.meta.dir, "fixtures", "PAYSLIP.pdf");
+const PASSWORD = process.env.PAYSLIP_TEST_PASSWORD;
+
+const enabled = existsSync(PDF_PATH) && !!PASSWORD;
+const it = enabled ? test : test.skip;
+if (!enabled) {
+  console.warn(
+    "parser.test.ts skipped: add fixtures/PAYSLIP.pdf and set PAYSLIP_TEST_PASSWORD to enable.",
+  );
+}
 
 async function load() {
   const buf = await Bun.file(PDF_PATH).arrayBuffer();
   return parsePayslip(new Uint8Array(buf), PASSWORD);
 }
 
-test("parses the payslip header", async () => {
+it("parses the payslip header", async () => {
   const payslip = await load();
   expect(payslip.header).toEqual({
     company: "SWIFT HAULAGE BERHAD (533234V)",
@@ -24,14 +37,14 @@ test("parses the payslip header", async () => {
   });
 });
 
-test("parses earnings, gross and nett pay", async () => {
+it("parses earnings, gross and nett pay", async () => {
   const payslip = await load();
   expect(payslip.earnings).toEqual([{ label: "BASIC PAY", amount: 50000 }]);
   expect(payslip.grossPay).toBe(44000);
   expect(payslip.nettPay).toBe(4502.2);
 });
 
-test("parses deductions as negative amounts", async () => {
+it("parses deductions as negative amounts", async () => {
   const payslip = await load();
   expect(payslip.deductions).toEqual([
     { label: "EMPLOYEE EPF (KWSP)", amount: -11000 },
@@ -44,7 +57,7 @@ test("parses deductions as negative amounts", async () => {
   ]);
 });
 
-test("gross plus deductions reconciles to nett pay", async () => {
+it("gross plus deductions reconciles to nett pay", async () => {
   const payslip = await load();
   const total =
     payslip.grossPay +
@@ -52,7 +65,7 @@ test("gross plus deductions reconciles to nett pay", async () => {
   expect(total).toBeCloseTo(payslip.nettPay, 2);
 });
 
-test("parses employer contributions", async () => {
+it("parses employer contributions", async () => {
   const payslip = await load();
   expect(payslip.employerContributions).toEqual([
     { label: "Employer EPF", amount: 100 },
@@ -61,7 +74,7 @@ test("parses employer contributions", async () => {
   ]);
 });
 
-test("parses year-to-date figures", async () => {
+it("parses year-to-date figures", async () => {
   const payslip = await load();
   const ytd = Object.fromEntries(
     payslip.yearToDate.map((i) => [i.label, i.amount]),

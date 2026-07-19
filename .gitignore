@@ -65,6 +65,14 @@ web_modules/
 # Yarn Integrity file
 .yarn-integrity
 
+# Local SQLite database
+mydb.sqlite
+mydb.sqlite-shm
+mydb.sqlite-wal
+
+# Private test fixtures — real payslips contain PII, never commit
+src/modules/swift-payslips/fixtures/*.pdf
+
 # dotenv environment variable files
 .env
 .env.*
