@@ -29,6 +29,6 @@ export function migrate(): void {
       db.run(sql);
       db.query("INSERT INTO _migrations (name) VALUES ($name)").run({ name: file });
     })();
-    console.log(`migrated: ${file}`);
+    console.error(`migrated: ${file}`);
   }
 }

@@ -47,4 +47,4 @@ const server = Bun.serve({
   },
 });
 
-console.log(`Server running at ${server.url}`);
+console.error(`Server running at ${server.url}`);

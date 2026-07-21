@@ -4,7 +4,8 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "bun run --hot index.ts"
+    "dev": "bun run --hot index.ts",
+    "mcp": "bun run src/mcp/server.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",
@@ -14,7 +15,9 @@
     "typescript": "^5"
   },
   "dependencies": {
-    "pdfjs-dist": "^6.1.200"
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "pdfjs-dist": "^6.1.200",
+    "zod": "3"
   },
   "packageManager": "bun@latest"
 }
