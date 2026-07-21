@@ -17,7 +17,7 @@ export const list = (req: Bun.BunRequest<"/payslips">): Response => {
   }
 };
 
-export const getOne = (req: Bun.BunRequest<"/payslips/:id">): Response => {
+export const view = (req: Bun.BunRequest<"/payslips/:id">): Response => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) {
     return error("Invalid payslip id", 400);

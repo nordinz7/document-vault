@@ -1,5 +1,5 @@
 import { migrate } from "./src/infra/db/migrate.ts";
-import { getOne, list, upload } from "./src/modules/swift-payslips/controller.ts";
+import { view, list, upload } from "./src/modules/swift-payslips/controller.ts";
 
 migrate();
 
@@ -38,7 +38,7 @@ const server = Bun.serve({
     },
 
     "/payslips/:id": {
-      GET: getOne,
+      GET: view,
     },
   },
 
