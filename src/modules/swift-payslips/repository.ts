@@ -1,13 +1,11 @@
 import db from "../../infra/db/index.ts";
+import { toCents, toRinggit } from "./helper.ts";
 import type {
   Payslip,
   PayslipHeader,
   PayslipLineItem,
   PayslipRecord,
 } from "./schema.ts";
-
-const toCents = (ringgit: number): number => Math.round(ringgit * 100);
-const toRinggit = (cents: number): number => cents / 100;
 
 interface PayslipRow {
   id: number;
