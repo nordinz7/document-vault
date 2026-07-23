@@ -37,6 +37,8 @@ export interface Employee {
   updatedAt: Date;
 }
 
+export type PayslipType = "salary" | "bonus";
+
 export interface PayslipRecord {
   id: number;
   employeeId: number;
@@ -51,4 +53,8 @@ export interface PayslipRecord {
   path: string;
   createdAt: Date;
   updatedAt: Date;
+
+  //derived fields (see helper.ts: derivePeriodKey / derivePayslipType)
+  periodKey: number; // sortable YYYYMM key derived from `period`, e.g. 202606, 202505
+  type: PayslipType; // "salary" for an END-period run paying BASIC PAY, else "bonus"
 }

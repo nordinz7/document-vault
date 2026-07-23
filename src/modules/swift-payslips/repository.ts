@@ -1,5 +1,10 @@
 import db from "../../infra/db/index.ts";
-import { toCents, toRinggit } from "./helper.ts";
+import {
+  derivePayslipType,
+  derivePeriodKey,
+  toCents,
+  toRinggit,
+} from "./helper.ts";
 import type {
   Payslip,
   PayslipHeader,
@@ -24,11 +29,12 @@ interface PayslipRow {
 }
 
 function mapRow(row: PayslipRow): PayslipRecord {
+  const earnings = JSON.parse(row.earnings || "[]") as PayslipLineItem[];
   return {
     id: row.id,
     employeeId: row.employee_id,
     period: row.period,
-    earnings: JSON.parse(row.earnings || "[]") as PayslipLineItem[],
+    earnings,
     deductions: JSON.parse(row.deductions || "[]") as PayslipLineItem[],
     employerContributions: JSON.parse(row.employer_contributions || "[]") as PayslipLineItem[],
     yearToDate: JSON.parse(row.year_to_date || "[]") as PayslipLineItem[],
@@ -38,6 +44,8 @@ function mapRow(row: PayslipRow): PayslipRecord {
     path: row.path,
     createdAt: new Date(row.created_at),
     updatedAt: new Date(row.updated_at),
+    periodKey: derivePeriodKey(row.period),
+    type: derivePayslipType(row.period, earnings),
   };
 }
 
