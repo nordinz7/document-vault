@@ -36,21 +36,25 @@ server.registerTool(
   {
     title: "List payslips",
     description:
-      "List stored payslip records, most recent first. Optionally filter by pay period and/or employee number.",
+      "List stored payslip records, most recent first. Optionally filter by pay period, employee number, and/or payslip type. Each record includes a derived `type` ('salary' or 'bonus') and a sortable `periodKey` (YYYYMM, e.g. 202606).",
     inputSchema: {
       period: z
         .string()
         .optional()
-        .describe("Pay period to filter by, exactly as printed on the payslip (e.g. '2026/06')."),
+        .describe("Pay period to filter by, exactly as printed on the payslip (e.g. 'END-JUNE-2026')."),
       employeeNo: z
         .string()
         .optional()
         .describe("Employee number to filter by."),
+      type: z
+        .enum(["salary", "bonus"])
+        .optional()
+        .describe("Payslip type to filter by: 'salary' for a period-ending run paying basic pay, else 'bonus'."),
     },
   },
-  async ({ period, employeeNo }) => {
+  async ({ period, employeeNo, type }) => {
     try {
-      return json(service.listPayslips({ period, employeeNo }));
+      return json(service.listPayslips({ period, employeeNo, type }));
     } catch (err) {
       console.error("list_payslips failed:", err);
       return failure("Failed to list payslips.");

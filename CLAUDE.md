@@ -27,6 +27,7 @@ A Bun HTTP service that ingests Swift Haulage payslip PDFs, parses them into str
 - `repository.ts` — the **only** layer that touches SQL and column names.
 - `parser.ts` — PDF → `Payslip`, independent of DB and HTTP.
 - `schema.ts` — shared types (domain `Payslip*` and DB `PayslipRecord`/`Employee` shapes).
+- `helper.ts` — pure, dependency-free functions shared across layers: money conversion (`toCents`/`toRinggit`) and the derivations `derivePeriodKey`/`derivePayslipType`.
 
 **Infrastructure** — [src/infra/db/index.ts](src/infra/db/index.ts) is connection-only (WAL mode, `foreign_keys = ON`) and deliberately does **not** create tables — this avoids an import cycle with the schema. [src/infra/db/migrate.ts](src/infra/db/migrate.ts) applies numbered `*.sql` files from `migrations/` in filename order, each in a transaction, recording applied names in `_migrations`. Add a new migration as `NNN_name.sql`; never edit an already-applied migration.
 
@@ -34,6 +35,7 @@ A Bun HTTP service that ingests Swift Haulage payslip PDFs, parses them into str
 
 - **Money is stored as integer cents** (`gross_pay_cents`, `nett_pay_cents`) to avoid float drift on `SUM()`. The Ringgit ⇄ cents conversion happens **only** at the repository boundary (`toCents`/`toRinggit`); every layer above works in Ringgit numbers. Deductions are kept **negative** exactly as printed.
 - **Line-item arrays** (earnings, deductions, employer contributions, year-to-date) are stored as JSON text columns, serialized/deserialized in `repository.ts`.
+- **Derived fields are computed on read, not stored.** `PayslipRecord.periodKey` (sortable `YYYYMM`) and `PayslipRecord.type` (`"salary"` for a period-ending run paying basic pay, else `"bonus"`) are computed in `mapRow` from the row's `period` and `earnings`, so they need no columns or migration. Because `type` is not a column, the `findPayslips` `type` filter is applied in-memory after mapping, not in SQL.
 - **Import is idempotent two ways**: by SHA-256 hash of the raw PDF bytes (re-uploading identical bytes returns the stored record without re-parsing), and by `UNIQUE(employee_id, period)` (`INSERT ... ON CONFLICT DO NOTHING`). Employee is upserted by `employee_number`.
 - **Bulk upload** — `POST /payslips` accepts a repeated `file` form field. One file → `201` with the record; multiple files → `207` with a per-file results array (order preserved) so one bad PDF doesn't fail the batch.
 

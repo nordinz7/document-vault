@@ -10,6 +10,7 @@ import type {
   PayslipHeader,
   PayslipLineItem,
   PayslipRecord,
+  PayslipType,
 } from "./schema.ts";
 
 interface PayslipRow {
@@ -136,6 +137,7 @@ export function findPayslipById(id: number): PayslipRecord | null {
 export interface PayslipFilter {
   period?: string;
   employeeNo?: string;
+  type?: PayslipType;
 }
 
 export function findPayslips(filter: PayslipFilter = {}): PayslipRecord[] {
@@ -158,5 +160,8 @@ export function findPayslips(filter: PayslipFilter = {}): PayslipRecord[] {
        ORDER BY pr.created_at DESC`,
     )
     .all(params) as PayslipRow[];
-  return rows.map(mapRow);
+  const records = rows.map(mapRow);
+  // `type` is derived on read (see mapRow), so this filter is applied here
+  // rather than in SQL.
+  return filter.type ? records.filter((r) => r.type === filter.type) : records;
 }
