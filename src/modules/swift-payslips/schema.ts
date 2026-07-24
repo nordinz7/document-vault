@@ -14,7 +14,7 @@ export interface PayslipLineItem {
   amount: number;
 }
 
-export interface Payslip {
+export interface ParsedPayslip {
   header: PayslipHeader;
   earnings: PayslipLineItem[];
   grossPay: number;
@@ -39,7 +39,7 @@ export interface Employee {
 
 export type PayslipType = "salary" | "bonus";
 
-export interface PayslipRecord {
+export interface Payslip {
   id: number;
   employeeId: number;
   period: string;

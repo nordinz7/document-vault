@@ -1,5 +1,5 @@
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
-import type { Payslip, PayslipHeader, PayslipLineItem } from "./schema.ts";
+import type { ParsedPayslip, PayslipHeader, PayslipLineItem } from "./schema.ts";
 
 interface Line {
   label: string;
@@ -79,7 +79,7 @@ const HEADER_LABELS: Record<string, keyof PayslipHeader> = {
   "TAX NO.:": "taxNo",
 };
 
-export function parseLines(lines: Line[]): Payslip {
+export function parseLines(lines: Line[]): ParsedPayslip {
   const header: Partial<PayslipHeader> = {};
   const earnings: PayslipLineItem[] = [];
   const deductions: PayslipLineItem[] = [];
@@ -160,6 +160,6 @@ export function parseLines(lines: Line[]): Payslip {
 export async function parsePayslip(
   data: Uint8Array,
   password?: string,
-): Promise<Payslip> {
+): Promise<ParsedPayslip> {
   return parseLines(await extractLines(data, password));
 }

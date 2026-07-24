@@ -1,13 +1,13 @@
 import db from "../../infra/db/index.ts";
 import { parsePayslip } from "./parser.ts";
 import * as repo from "./repository.ts";
-import type { PayslipRecord } from "./schema.ts";
+import type { Payslip } from "./schema.ts";
 
-export function listPayslips(filter?: repo.PayslipFilter): PayslipRecord[] {
+export function listPayslips(filter?: repo.PayslipFilter): Payslip[] {
   return repo.findPayslips(filter);
 }
 
-export function getPayslip(id: number): PayslipRecord | null {
+export function getPayslip(id: number): Payslip | null {
   return repo.findPayslipById(id);
 }
 
@@ -15,7 +15,7 @@ export async function importPayslip(
   pdf: Uint8Array,
   path: string,
   password?: string,
-): Promise<PayslipRecord> {
+): Promise<Payslip> {
   const hash = new Bun.CryptoHasher("sha256").update(pdf).digest("hex");
 
   const existing = repo.findPayslipByHash(hash);
