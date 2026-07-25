@@ -1,7 +1,7 @@
 import db from "../../infra/db/index.ts";
 import { parsePayslip } from "./parser.ts";
 import * as repo from "./repository.ts";
-import type { Payslip } from "./schema.ts";
+import type { Payslip } from "./types.ts";
 
 export function listPayslips(filter?: repo.PayslipFilter): Payslip[] {
   return repo.findPayslips(filter);
@@ -24,7 +24,7 @@ export async function importPayslip(
   const payslip = await parsePayslip(pdf, password);
 
   return db.transaction(() => {
-    const employeeId = repo.upsertEmployee(payslip.header);
-    return repo.insertPayslip(employeeId, payslip, hash, path);
+    const employee = repo.upsertEmployee(payslip.header);
+    return repo.insertPayslip(employee.id, payslip, hash, path);
   })();
 }

@@ -6,9 +6,12 @@ const error = (message: string, status: number): Response =>
 export const list = (req: Bun.BunRequest<"/payslips">): Response => {
   try {
     const url = new URL(req.url);
+    const periodKeyParam = url.searchParams.get("periodKey");
+    const typeParam = url.searchParams.get("type");
     const payslips = service.listPayslips({
-      period: url.searchParams.get("period") ?? undefined,
+      periodKey: periodKeyParam ? Number(periodKeyParam) : undefined,
       employeeNo: url.searchParams.get("employeeNo") ?? undefined,
+      type: typeParam === "salary" || typeParam === "bonus" ? typeParam : undefined,
     });
     return Response.json(payslips);
   } catch (err) {

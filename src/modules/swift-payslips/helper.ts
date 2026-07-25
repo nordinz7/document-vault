@@ -1,4 +1,4 @@
-import type { PayslipLineItem, PayslipType } from "./schema.ts";
+import type { PayslipLineItem, PayslipType } from "./types.ts";
 
 /**
  * Money is stored as integer cents to avoid float drift on SUM().

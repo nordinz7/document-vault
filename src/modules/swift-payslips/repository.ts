@@ -6,30 +6,16 @@ import {
   toRinggit,
 } from "./helper.ts";
 import type {
+  Employee,
   ParsedPayslip,
   Payslip,
   PayslipHeader,
   PayslipLineItem,
+  PayslipRecord,
   PayslipType,
-} from "./schema.ts";
+} from "./types.ts";
 
-interface PayslipRow {
-  id: number;
-  employee_id: number;
-  period: string;
-  earnings: string;
-  deductions: string;
-  employer_contributions: string;
-  year_to_date: string;
-  gross_pay_cents: number;
-  nett_pay_cents: number;
-  hash: string;
-  path: string;
-  created_at: string;
-  updated_at: string;
-}
-
-function mapRow(row: PayslipRow): Payslip {
+function mapRow(row: PayslipRecord): Payslip {
   const earnings = JSON.parse(row.earnings || "[]") as PayslipLineItem[];
   return {
     id: row.id,
@@ -50,12 +36,11 @@ function mapRow(row: PayslipRow): Payslip {
   };
 }
 
-export function upsertEmployee(h: PayslipHeader): number {
-  const row = db
-    .query(
+export function upsertEmployee(h: PayslipHeader): Employee {
+  const row = db.query(
       `INSERT INTO employee
          (employee_number, name, cost_center, ic_passport, epf_number, tax_number, company)
-       VALUES ($employeeNo, $name, $costCenter, $icPassport, $epfNo, $taxNo, $company)
+       VALUES ($employee_number, $name, $cost_center, $ic_passport, $epf_number, $tax_number, $company)
        ON CONFLICT(employee_number) DO UPDATE SET
          name        = excluded.name,
          cost_center = excluded.cost_center,
@@ -67,15 +52,16 @@ export function upsertEmployee(h: PayslipHeader): number {
        RETURNING id`,
     )
     .get({
-      employeeNo: h.employeeNo,
+      employee_number: h.employeeNo,
       name: h.name,
-      costCenter: h.costCenter,
-      icPassport: h.icPassport,
-      epfNo: h.epfNo,
-      taxNo: h.taxNo,
+      cost_center: h.costCenter,
+      ic_passport: h.icPassport,
+      epf_number: h.epfNo,
+      tax_number: h.taxNo,
       company: h.company,
-    }) as { id: number };
-  return row.id;
+    })
+
+  return row as Employee;
 }
 
 export function insertPayslip(
@@ -89,23 +75,23 @@ export function insertPayslip(
       `INSERT INTO payslip_record
          (employee_id, period, earnings, deductions, employer_contributions,
           year_to_date, gross_pay_cents, nett_pay_cents, hash, path)
-       VALUES ($employeeId, $period, $earnings, $deductions, $employerContributions,
-               $yearToDate, $grossPayCents, $nettPayCents, $hash, $path)
+       VALUES ($employee_id, $period, $earnings, $deductions, $employer_contributions,
+               $year_to_date, $gross_pay_cents, $nett_pay_cents, $hash, $path)
        ON CONFLICT(employee_id, period) DO NOTHING
        RETURNING *`,
     )
     .get({
-      employeeId,
+      employee_id: employeeId,
       period: payslip.header.period,
       earnings: JSON.stringify(payslip.earnings),
       deductions: JSON.stringify(payslip.deductions),
-      employerContributions: JSON.stringify(payslip.employerContributions),
-      yearToDate: JSON.stringify(payslip.yearToDate),
-      grossPayCents: toCents(payslip.grossPay),
-      nettPayCents: toCents(payslip.nettPay),
+      employer_contributions: JSON.stringify(payslip.employerContributions),
+      year_to_date: JSON.stringify(payslip.yearToDate),
+      gross_pay_cents: toCents(payslip.grossPay),
+      nett_pay_cents: toCents(payslip.nettPay),
       hash,
       path,
-    }) as PayslipRow | null;
+    }) as PayslipRecord | null;
 
   return row ? mapRow(row) : findByEmployeeAndPeriod(employeeId, payslip.header.period)!;
 }
@@ -113,7 +99,7 @@ export function insertPayslip(
 export function findPayslipByHash(hash: string): Payslip | null {
   const row = db
     .query(`SELECT * FROM payslip_record WHERE hash = $hash`)
-    .get({ hash }) as PayslipRow | null;
+    .get({ hash }) as PayslipRecord | null;
   return row ? mapRow(row) : null;
 }
 
@@ -123,14 +109,14 @@ export function findByEmployeeAndPeriod(
 ): Payslip | null {
   const row = db
     .query(`SELECT * FROM payslip_record WHERE employee_id = $employeeId AND period = $period`)
-    .get({ employeeId, period }) as PayslipRow | null;
+    .get({ employeeId, period }) as PayslipRecord | null;
   return row ? mapRow(row) : null;
 }
 
 export function findPayslipById(id: number): Payslip | null {
   const row = db
     .query(`SELECT * FROM payslip_record WHERE id = $id`)
-    .get({ id }) as PayslipRow | null;
+    .get({ id }) as PayslipRecord | null;
   return row ? mapRow(row) : null;
 }
 
@@ -143,10 +129,8 @@ export interface PayslipFilter {
 export function findPayslips(filter: PayslipFilter = {}): Payslip[] {
   const clauses: string[] = [];
   const params: Record<string, string> = {};
-  if (filter.periodKey) {
-    clauses.push("pr.periodKey = $period");
-    params.periodKey = filter.periodKey.toString();
-  }
+  // `periodKey` and `type` are not columns (derived on read), so only
+  // `employeeNo` is filtered in SQL; the rest is applied in-memory below.
   if (filter.employeeNo) {
     clauses.push("e.employee_number = $employeeNo");
     params.employeeNo = filter.employeeNo;
@@ -159,7 +143,7 @@ export function findPayslips(filter: PayslipFilter = {}): Payslip[] {
        ${where}
        ORDER BY pr.created_at DESC`,
     )
-    .all(params) as PayslipRow[];
+    .all(params) as PayslipRecord[];
   // `periodKey` and `type` are derived on read (see mapRow), so their filters
   // are applied here rather than in SQL.
   let records = rows.map(mapRow);

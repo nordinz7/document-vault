@@ -1,5 +1,5 @@
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
-import type { ParsedPayslip, PayslipHeader, PayslipLineItem } from "./schema.ts";
+import type { ParsedPayslip, PayslipHeader, PayslipLineItem } from "./types.ts";
 
 interface Line {
   label: string;
