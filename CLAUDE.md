@@ -41,8 +41,12 @@ A Bun HTTP service that ingests Swift Haulage payslip PDFs, parses them into str
 
 ### PDF parsing
 
-`parser.ts` uses `pdfjs-dist/legacy` build. It reconstructs visual lines by grouping text items by y-coordinate (with a small `Y_TOLERANCE` for jitter), sorts left-to-right, treats the leftmost item as the label and the rest as the value, then runs a section state machine (`header` → `earnings` → `deductions` → `ytd`) keyed off section-header labels. Parsing throws if any required header field, `GROSS PAY`, or `NETT PAY` is missing.
+`parser.ts` uses `pdfjs-dist/legacy` build. `extractLines` is a thin PDF wrapper: it collects every page's `getTextContent().items` and hands them to **`linesFromItems`**, a pure function that reconstructs visual lines by grouping text items by y-coordinate (with a small `Y_TOLERANCE` for jitter), sorts left-to-right, and treats the leftmost item as the label and the rest as the value. `parseLines` then runs a section state machine (`header` → `earnings` → `deductions` → `ytd`) keyed off section-header labels. Parsing throws if any required header field, `GROSS PAY`, or `NETT PAY` is missing. Keeping the item→line grouping pure is what lets the parser be tested from a JSON fixture instead of a PDF.
 
 ## Testing
 
-Tests use `bun:test`. `parser.test.ts` runs against a **real payslip fixture containing PII that is never committed** — it needs `fixtures/PAYSLIP.pdf` plus `PAYSLIP_TEST_PASSWORD` (a local `.env` works; Bun loads it). When either is absent the tests **skip** rather than fail, so CI stays green without the secret. See [.env.example](.env.example) and [src/modules/swift-payslips/fixtures/README.md](src/modules/swift-payslips/fixtures/README.md). The `controller`/`service`/`repository`/`schema` test files are currently empty stubs.
+Tests use `bun:test` and need no secrets — `parser.test.ts` runs entirely off `fixtures/content.json`, verbatim `getTextContent()` output from a real payslip with every identity and money string replaced by a consistent fake, so it is safe to commit. The tests feed it through `linesFromItems` + `parseLines` and cover line grouping, header/section parsing, employer-contribution splitting, YTD, and the missing-field errors.
+
+**Never commit real payslip data.** Real PDFs are gitignored (`fixtures/*.pdf`), and re-capturing `content.json` from a new payslip means anonymising every `str` value again first — see [src/modules/swift-payslips/fixtures/README.md](src/modules/swift-payslips/fixtures/README.md). Any test that reads a real PDF must gate on `fixtures/PAYSLIP.pdf` + `PAYSLIP_TEST_PASSWORD` ([.env.example](.env.example)) and skip when absent, and must not assert on real identity values.
+
+The `controller`/`service`/`repository`/`schema` test files are currently empty stubs.
