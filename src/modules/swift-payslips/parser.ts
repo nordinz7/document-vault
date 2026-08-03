@@ -1,5 +1,13 @@
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+import type {
+  TextItem,
+  TextMarkedContent,
+} from "pdfjs-dist/types/src/display/api";
 import type { ParsedPayslip, PayslipHeader, PayslipLineItem } from "./types.ts";
+
+/** One entry of `getTextContent().items` — a text run, or a marked-content
+ *  marker (no `str`, skipped). */
+export type TextContentItem = TextItem | TextMarkedContent;
 
 interface Line {
   label: string;
@@ -8,20 +16,15 @@ interface Line {
 
 const Y_TOLERANCE = 2;
 
-export async function extractLines(
-  data: Uint8Array,
-  password?: string,
-): Promise<Line[]> {
-  const pdf = await getDocument({ data, password }).promise;
+/** Groups raw `getTextContent()` items into visual lines: leftmost item is the
+ *  label, the rest joined is the value. Pure — tested against a JSON fixture of
+ *  real `getTextContent()` output. */
+export function linesFromItems(items: readonly TextContentItem[]): Line[] {
   const rows: { y: number; x: number; str: string }[] = [];
 
-  for (let p = 1; p <= pdf.numPages; p++) {
-    const page = await pdf.getPage(p);
-    const content = await page.getTextContent();
-    for (const item of content.items) {
-      if (!("str" in item) || !item.str.trim()) continue;
-      rows.push({ x: item.transform[4], y: item.transform[5], str: item.str });
-    }
+  for (const item of items) {
+    if (!("str" in item) || !item.str?.trim()) continue;
+    rows.push({ x: item.transform[4]!, y: item.transform[5]!, str: item.str });
   }
 
   rows.sort((a, b) => b.y - a.y || a.x - b.x);
@@ -49,6 +52,22 @@ export async function extractLines(
   }
   flush();
   return lines;
+}
+
+export async function extractLines(
+  data: Uint8Array,
+  password?: string,
+): Promise<Line[]> {
+  const pdf = await getDocument({ data, password }).promise;
+  const items: TextContentItem[] = [];
+
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const page = await pdf.getPage(p);
+    const content = await page.getTextContent();
+    items.push(...content.items);
+  }
+
+  return linesFromItems(items);
 }
 
 function parseAmount(raw: string): number {
