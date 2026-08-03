@@ -49,4 +49,8 @@ Tests use `bun:test` and need no secrets — `parser.test.ts` runs entirely off 
 
 **Never commit real payslip data.** Real PDFs are gitignored (`fixtures/*.pdf`), and re-capturing `content.json` from a new payslip means anonymising every `str` value again first — see [src/modules/swift-payslips/fixtures/README.md](src/modules/swift-payslips/fixtures/README.md). Any test that reads a real PDF must gate on `fixtures/PAYSLIP.pdf` + `PAYSLIP_TEST_PASSWORD` ([.env.example](.env.example)) and skip when absent, and must not assert on real identity values.
 
-The `controller`/`service`/`repository`/`schema` test files are currently empty stubs.
+`helper.test.ts` covers the pure layer directly: the cents ⇄ Ringgit round-trip (including the float-drift case that motivates integer cents), `derivePeriodKey` — including the silent `0` it returns for an unrecognised month or year — and both conditions of `derivePayslipType`.
+
+**Test by risk, not by file.** Don't mirror the module tree with a `*.test.ts` per layer; an empty stub reads as coverage debt where none is owed. `service.ts` is thin orchestration with one real decision (the hash short-circuit before parsing) and `controller.ts` is request/response shaping — both are better covered end-to-end by driving the [index.ts](index.ts) routes with a real `Request` than by unit tests with mocked layers. `repository.ts` is where the invariants live and deserves tests against a real migrated SQLite instance.
+
+Any test that touches the DB **must** set `DB_PATH` (to `":memory:"` or a scratch file) before importing anything that pulls in `src/infra/db/index.ts` — the connection is a module-level singleton, so an unset `DB_PATH` means the test writes to the dev database.
