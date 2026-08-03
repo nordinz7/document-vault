@@ -29,7 +29,7 @@ A Bun HTTP service that ingests Swift Haulage payslip PDFs, parses them into str
 - `types.ts` — shared types. `PayslipRecord` is the raw SQLite row (snake_case, cents, JSON text) and is repository-internal; `Payslip` is the domain shape (camelCase, Ringgit, `Date`s, derived fields) that the service and controller surface. `mapRow` is the only crossing point. Don't mix them up — the names read as if reversed.
 - `helper.ts` — pure, dependency-free functions shared across layers: money conversion (`toCents`/`toRinggit`) and the derivations `derivePeriodKey`/`derivePayslipType`.
 
-**Infrastructure** — [src/infra/db/index.ts](src/infra/db/index.ts) is connection-only (WAL mode, `foreign_keys = ON`) and deliberately does **not** create tables — this avoids an import cycle with the schema. [src/infra/db/migrate.ts](src/infra/db/migrate.ts) applies numbered `*.sql` files from `migrations/` in filename order, each in a transaction, recording applied names in `_migrations`. Add a new migration as `NNN_name.sql`; never edit an already-applied migration.
+**Infrastructure** — [src/infra/db/index.ts](src/infra/db/index.ts) is connection-only (WAL mode, `foreign_keys = ON`) and deliberately does **not** create tables — this avoids an import cycle with the schema. [src/infra/db/migrate.ts](src/infra/db/migrate.ts) applies numbered `*.sql` files from `migrations/` in filename order, each in a transaction, recording applied names in `_migrations`. Add a new migration as `NNN_name.sql`; never edit an already-applied migration. The DB file defaults to `mydb.sqlite` at the project root; the `DB_PATH` env var overrides it verbatim (so `":memory:"` works).
 
 ### Key invariants
 
