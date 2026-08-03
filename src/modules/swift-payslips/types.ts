@@ -39,7 +39,9 @@ export interface Employee {
   created_at: string;
   updated_at: string;
 }
-export interface Payslip {
+/** A `payslip_record` row exactly as SQLite returns it — snake_case columns,
+ *  money as integer cents, line items as JSON text. Repository-internal. */
+export interface PayslipRecord {
   id: number;
   employee_id: number;
   period: string;
@@ -51,20 +53,28 @@ export interface Payslip {
   nett_pay_cents: number;
   hash: string; // SHA-256 of the source PDF
   path: string;
-  period_key: number; // sortable YYYYMM key derived from `period`, e.g. 202606, 202505
-  type: PayslipType; // "salary" for an END-period run paying BASIC PAY, else "bonus"
-
   created_at: string;
   updated_at: string;
 }
 
 /** Domain payslip — Ringgit money, `Date`s, and derived fields; the mapped
  *  shape returned by the repository and surfaced by the service/controller. */
-export type PayslipRecord = Payslip & {
+export interface Payslip {
+  id: number;
+  employeeId: number;
+  period: string;
   earnings: PayslipLineItem[];
   deductions: PayslipLineItem[];
   employerContributions: PayslipLineItem[];
   yearToDate: PayslipLineItem[];
+  grossPay: number;
+  nettPay: number;
+  hash: string;
+  path: string;
   createdAt: Date;
   updatedAt: Date;
+  /** Sortable YYYYMM key derived from `period`, e.g. 202606. Not a column. */
+  periodKey: number;
+  /** "salary" for an END-period run paying BASIC PAY, else "bonus". Not a column. */
+  type: PayslipType;
 }
