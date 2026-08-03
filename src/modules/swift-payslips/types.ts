@@ -61,20 +61,22 @@ export interface PayslipRecord {
  *  shape returned by the repository and surfaced by the service/controller. */
 export interface Payslip {
   id: number;
-  employeeId: number;
+
+  employee_id: number;
   period: string;
   earnings: PayslipLineItem[];
   deductions: PayslipLineItem[];
-  employerContributions: PayslipLineItem[];
-  yearToDate: PayslipLineItem[];
-  grossPay: number;
-  nettPay: number;
+  employer_contributions: PayslipLineItem[];
+  gross_pay_cents: number; // money as integer cents
+  nett_pay_cents: number;
+  year_to_date: PayslipLineItem[];
   hash: string;
   path: string;
-  createdAt: Date;
-  updatedAt: Date;
+  created_at: Date;
+  updated_at: Date;
+
   /** Sortable YYYYMM key derived from `period`, e.g. 202606. Not a column. */
-  periodKey: number;
+  period_key: number;
   /** "salary" for an END-period run paying BASIC PAY, else "bonus". Not a column. */
   type: PayslipType;
 }

@@ -108,8 +108,8 @@ export function findByEmployeeAndPeriod(
   period: string,
 ): Payslip | null {
   const row = db
-    .query(`SELECT * FROM payslip_record WHERE employee_id = $employeeId AND period = $period`)
-    .get({ employeeId, period }) as PayslipRecord | null;
+    .query(`SELECT * FROM payslip_record WHERE employee_id = $employee_id AND period = $period`)
+    .get({ employee_id: employeeId, period }) as PayslipRecord | null;
   return row ? mapRow(row) : null;
 }
 
@@ -132,8 +132,8 @@ export function findPayslips(filter: PayslipFilter = {}): Payslip[] {
   // `periodKey` and `type` are not columns (derived on read), so only
   // `employeeNo` is filtered in SQL; the rest is applied in-memory below.
   if (filter.employeeNo) {
-    clauses.push("e.employee_number = $employeeNo");
-    params.employeeNo = filter.employeeNo;
+    clauses.push("e.employee_number = $employee_number");
+    params.employee_number = filter.employeeNo;
   }
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
   const rows = db
