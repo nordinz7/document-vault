@@ -16,23 +16,18 @@ import type {
 } from "./types.ts";
 
 function mapRow(row: PayslipRecord): Payslip {
-  const earnings = JSON.parse(row.earnings || "[]") as PayslipLineItem[];
   return {
-    id: row.id,
-    employeeId: row.employee_id,
-    period: row.period,
-    earnings,
+    ...row,
+
+    earnings: JSON.parse(row.earnings || "[]") as PayslipLineItem[],
     deductions: JSON.parse(row.deductions || "[]") as PayslipLineItem[],
-    employerContributions: JSON.parse(row.employer_contributions || "[]") as PayslipLineItem[],
-    yearToDate: JSON.parse(row.year_to_date || "[]") as PayslipLineItem[],
-    grossPay: toRinggit(row.gross_pay_cents),
-    nettPay: toRinggit(row.nett_pay_cents),
-    hash: row.hash,
-    path: row.path,
-    createdAt: new Date(row.created_at),
-    updatedAt: new Date(row.updated_at),
-    periodKey: derivePeriodKey(row.period),
-    type: derivePayslipType(row.period, earnings),
+    employer_contributions: JSON.parse(row.employer_contributions || "[]") as PayslipLineItem[],
+    year_to_date: JSON.parse(row.year_to_date || "[]") as PayslipLineItem[],
+
+    gross_pay_cents: toRinggit(row.gross_pay_cents),
+    nett_pay_cents: toRinggit(row.nett_pay_cents),
+    created_at: new Date(row.created_at),
+    updated_at: new Date(row.updated_at),
   };
 }
 
@@ -70,19 +65,11 @@ export function insertPayslip(
   hash: string,
   path: string,
 ): Payslip {
-  const row = db
-    .query(
-      `INSERT INTO payslip_record
-         (employee_id, period, earnings, deductions, employer_contributions,
-          year_to_date, gross_pay_cents, nett_pay_cents, hash, path)
-       VALUES ($employee_id, $period, $earnings, $deductions, $employer_contributions,
-               $year_to_date, $gross_pay_cents, $nett_pay_cents, $hash, $path)
-       ON CONFLICT(employee_id, period) DO NOTHING
-       RETURNING *`,
-    )
-    .get({
+  const values = {
       employee_id: employeeId,
       period: payslip.header.period,
+      period_key: derivePeriodKey(payslip.header.period),
+      type: derivePayslipType(payslip.header.period, payslip.earnings),
       earnings: JSON.stringify(payslip.earnings),
       deductions: JSON.stringify(payslip.deductions),
       employer_contributions: JSON.stringify(payslip.employerContributions),
@@ -91,7 +78,20 @@ export function insertPayslip(
       nett_pay_cents: toCents(payslip.nettPay),
       hash,
       path,
-    }) as PayslipRecord | null;
+    }
+  const row = db
+    .query(
+      `INSERT INTO payslip_record
+         (employee_id, period, period_key, type, earnings, deductions,
+          employer_contributions, year_to_date, gross_pay_cents, nett_pay_cents,
+          hash, path)
+       VALUES ($employee_id, $period, $period_key, $type, $earnings, $deductions,
+               $employer_contributions, $year_to_date, $gross_pay_cents, $nett_pay_cents,
+               $hash, $path)
+       ON CONFLICT(employee_id, period) DO NOTHING
+       RETURNING *`,
+    )
+    .get(values) as PayslipRecord | null;
 
   return row ? mapRow(row) : findByEmployeeAndPeriod(employeeId, payslip.header.period)!;
 }
@@ -128,12 +128,18 @@ export interface PayslipFilter {
 
 export function findPayslips(filter: PayslipFilter = {}): Payslip[] {
   const clauses: string[] = [];
-  const params: Record<string, string> = {};
-  // `periodKey` and `type` are not columns (derived on read), so only
-  // `employeeNo` is filtered in SQL; the rest is applied in-memory below.
+  const params: Record<string, string | number> = {};
   if (filter.employeeNo) {
     clauses.push("e.employee_number = $employee_number");
     params.employee_number = filter.employeeNo;
+  }
+  if (filter.periodKey !== undefined) {
+    clauses.push("pr.period_key = $period_key");
+    params.period_key = filter.periodKey;
+  }
+  if (filter.type) {
+    clauses.push("pr.type = $type");
+    params.type = filter.type;
   }
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
   const rows = db
@@ -144,14 +150,5 @@ export function findPayslips(filter: PayslipFilter = {}): Payslip[] {
        ORDER BY pr.created_at DESC`,
     )
     .all(params) as PayslipRecord[];
-  // `periodKey` and `type` are derived on read (see mapRow), so their filters
-  // are applied here rather than in SQL.
-  let records = rows.map(mapRow);
-  if (filter.periodKey !== undefined) {
-    records = records.filter((r) => r.periodKey === filter.periodKey);
-  }
-  if (filter.type) {
-    records = records.filter((r) => r.type === filter.type);
-  }
-  return records;
+  return rows.map(mapRow);
 }

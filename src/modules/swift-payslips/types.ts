@@ -55,6 +55,9 @@ export interface PayslipRecord {
   path: string;
   created_at: string;
   updated_at: string;
+
+  period_key: number;
+  type: PayslipType;
 }
 
 /** Domain payslip — Ringgit money, `Date`s, and derived fields; the mapped
@@ -75,8 +78,6 @@ export interface Payslip {
   created_at: Date;
   updated_at: Date;
 
-  /** Sortable YYYYMM key derived from `period`, e.g. 202606. Not a column. */
   period_key: number;
-  /** "salary" for an END-period run paying BASIC PAY, else "bonus". Not a column. */
   type: PayslipType;
 }
