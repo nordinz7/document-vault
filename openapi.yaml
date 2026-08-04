@@ -1,17 +1,47 @@
 openapi: 3.1.0
 info:
   title: Document Vault — Swift Payslips API
-  version: 1.0.0
+  version: 1.1.0
   description: |
     Ingests Swift Haulage payslip PDFs, parses them into structured records,
     and stores them in a local SQLite database.
 
-    **Money** is returned in Ringgit (numbers). Deductions are kept **negative**
+    ## Two surfaces, one service
+
+    The same business logic is exposed twice. Both call the identical service
+    layer in-process, so they see the same database and the same records:
+
+    | Surface | Transport | Entry point |
+    | --- | --- | --- |
+    | HTTP (this spec) | `Bun.serve` on `http://localhost:3000` | `index.ts` |
+    | MCP | JSON-RPC over **stdio** | `bun run mcp` |
+
+    The MCP server is **not** an HTTP client — it does not call these endpoints
+    and the HTTP server does not need to be running for MCP tools to work.
+
+    ### MCP tool equivalents
+
+    | MCP tool | HTTP equivalent |
+    | --- | --- |
+    | `list_payslips` | `GET /payslips` |
+    | `get_payslip` | `GET /payslips/{id}` |
+    | `import_payslip` | `POST /payslips` (MCP reads a local file path instead of a multipart upload) |
+
+    ## Conventions
+
+    **Field names are snake_case** and mirror the database columns.
+
+    **Money** is returned in **Ringgit** (decimal numbers), not cents.
+    Note the field names `gross_pay_cents` / `nett_pay_cents` are misleading:
+    money is *stored* as integer cents to avoid float drift on `SUM()`, but it
+    is converted to Ringgit at the repository boundary, so these fields carry
+    Ringgit on the wire (e.g. `6000.55`). Deductions are kept **negative**
     exactly as printed on the payslip.
 
     **Idempotency** — importing is idempotent two ways: by SHA-256 hash of the
-    raw PDF bytes (re-uploading identical bytes returns the stored record), and
-    by `UNIQUE(employee_id, period)`.
+    raw PDF bytes (re-uploading identical bytes returns the stored record
+    without re-parsing), and by `UNIQUE(employee_id, period)`. Either way you
+    get `201` with the existing record rather than a duplicate or an error.
 servers:
   - url: http://localhost:3000
     description: Local dev server
@@ -28,29 +58,67 @@ paths:
             text/plain:
               schema: { type: string, example: OK }
 
+  /docs:
+    get:
+      summary: Interactive API documentation
+      operationId: docs
+      description: Renders this spec as a browsable Scalar API reference.
+      responses:
+        "200":
+          description: HTML documentation page
+          content:
+            text/html:
+              schema: { type: string }
+
+  /openapi.yaml:
+    get:
+      summary: This OpenAPI document
+      operationId: spec
+      responses:
+        "200":
+          description: The OpenAPI spec
+          content:
+            application/yaml:
+              schema: { type: string }
+
   /payslips:
     get:
       summary: List payslips
       operationId: listPayslips
+      description: |
+        Returns matching payslip records, **most recent first**
+        (`ORDER BY created_at DESC`). All filters are optional and combine
+        with AND. Unknown query parameters are ignored.
       parameters:
-        - name: period
+        - name: periodKey
           in: query
           required: false
-          description: Filter by pay period (e.g. "2026-06")
-          schema: { type: string }
+          description: |
+            Filter by the sortable pay-period key (`YYYYMM`), e.g. `202606`
+            for June 2026. Non-numeric values yield no matches.
+          schema: { type: integer, example: 202606 }
         - name: employeeNo
           in: query
           required: false
-          description: Filter by employee number
-          schema: { type: string }
+          description: Filter by employee number (exact match).
+          schema: { type: string, example: "E1234" }
+        - name: type
+          in: query
+          required: false
+          description: |
+            Filter by payslip type. Any other value is ignored (treated as
+            no filter) rather than rejected.
+          schema:
+            type: string
+            enum: [salary, bonus]
       responses:
         "200":
-          description: Matching payslip records (order not guaranteed)
+          description: Matching payslip records, most recent first
           content:
             application/json:
               schema:
                 type: array
-                items: { $ref: "#/components/schemas/PayslipRecord" }
+                items: { $ref: "#/components/schemas/Payslip" }
         "500": { $ref: "#/components/responses/Error" }
     post:
       summary: Upload one or more payslip PDFs
@@ -58,7 +126,7 @@ paths:
       description: |
         Send one or more PDFs in the repeated `file` form field.
 
-        - **One file** → `201` with the created (or existing) record.
+        - **One file** → `201` with the created (or pre-existing) record.
         - **Multiple files** → `207` with a per-file results array (order
           preserved) so one bad PDF doesn't fail the batch.
       requestBody:
@@ -81,16 +149,26 @@ paths:
           description: Single file imported
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/PayslipRecord" }
+              schema: { $ref: "#/components/schemas/Payslip" }
         "207":
-          description: Multiple files — per-file results
+          description: |
+            Multiple files — per-file results. The response is `207` even when
+            every file succeeded; inspect each element's `status`.
           content:
             application/json:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/BulkResult" }
-        "400": { $ref: "#/components/responses/Error" }
-        "422": { $ref: "#/components/responses/Error" }
+        "400":
+          description: Body was not multipart/form-data, or no `file` field was sent
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422":
+          description: The PDF could not be parsed (single-file uploads only)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
 
   /payslips/{id}:
     get:
@@ -106,7 +184,7 @@ paths:
           description: The payslip record
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/PayslipRecord" }
+              schema: { $ref: "#/components/schemas/Payslip" }
         "400": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "500": { $ref: "#/components/responses/Error" }
@@ -124,60 +202,93 @@ components:
       type: object
       required: [error]
       properties:
-        error: { type: string }
+        error: { type: string, example: Payslip not found }
 
     LineItem:
       type: object
       required: [label, amount]
       properties:
-        label: { type: string, example: BASIC SALARY }
+        label: { type: string, example: BASIC PAY }
         amount:
           type: number
           description: Ringgit; deductions are negative.
           example: 5000
 
-    PayslipRecord:
+    PayslipType:
+      type: string
+      description: |
+        `salary` when the run is period-ending (`period` starts with `END`)
+        **and** pays a `BASIC PAY` line item; otherwise `bonus`.
+      enum: [salary, bonus]
+
+    Payslip:
       type: object
+      description: |
+        A stored payslip. Field names mirror the database columns
+        (snake_case), but money is in Ringgit and timestamps are ISO 8601.
       required:
         - id
-        - employeeId
+        - employee_id
+        - type
         - period
+        - period_key
         - earnings
-        - grossPay
         - deductions
-        - nettPay
-        - employerContributions
-        - yearToDate
+        - employer_contributions
+        - year_to_date
+        - gross_pay_cents
+        - nett_pay_cents
         - hash
         - path
-        - createdAt
-        - updatedAt
+        - created_at
+        - updated_at
       properties:
         id: { type: integer, example: 1 }
-        employeeId: { type: integer, example: 1 }
-        period: { type: string, example: "2026-06" }
+        employee_id: { type: integer, example: 1 }
+        type: { $ref: "#/components/schemas/PayslipType" }
+        period:
+          type: string
+          description: The period label exactly as printed on the payslip.
+          example: END-JUNE-2026
+        period_key:
+          type: integer
+          description: |
+            Sortable `YYYYMM` key derived from `period`. Falls back to `0`
+            when the month and year cannot both be recognised.
+          example: 202606
         earnings:
           type: array
           items: { $ref: "#/components/schemas/LineItem" }
-        grossPay: { type: number, example: 6000 }
         deductions:
           type: array
+          description: Amounts are negative, as printed.
           items: { $ref: "#/components/schemas/LineItem" }
-        nettPay: { type: number, example: 5200 }
-        employerContributions:
+        employer_contributions:
           type: array
           items: { $ref: "#/components/schemas/LineItem" }
-        yearToDate:
+        year_to_date:
           type: array
           items: { $ref: "#/components/schemas/LineItem" }
+        gross_pay_cents:
+          type: number
+          description: Gross pay in **Ringgit**, despite the `_cents` suffix.
+          example: 6000.55
+        nett_pay_cents:
+          type: number
+          description: Nett pay in **Ringgit**, despite the `_cents` suffix.
+          example: 5340.55
         hash:
           type: string
           description: SHA-256 of the raw PDF bytes.
+          example: 9f2c1a...
         path:
           type: string
-          description: Original uploaded filename.
-        createdAt: { type: string, format: date-time }
-        updatedAt: { type: string, format: date-time }
+          description: |
+            Original uploaded filename (HTTP), or the local file path the
+            record was imported from (MCP `import_payslip`).
+          example: june.pdf
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
 
     BulkResult:
       type: object
@@ -188,7 +299,9 @@ components:
           type: integer
           description: 201 on success, 422 on failure.
           example: 201
-        record: { $ref: "#/components/schemas/PayslipRecord" }
+        record:
+          description: Present when status is 201.
+          $ref: "#/components/schemas/Payslip"
         error:
           type: string
           description: Present when status is 422.
