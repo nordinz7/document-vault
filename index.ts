@@ -1,6 +1,7 @@
 import { migrate } from "./src/infra/db/migrate.ts";
 import { docs, spec } from "./src/modules/docs/controller.ts";
 import { view, list, upload } from "./src/modules/swift-payslips/controller.ts";
+import GraphqlHandler  from "./src/plugins/graphql";
 
 migrate();
 
@@ -22,9 +23,7 @@ const server = Bun.serve({
     },
   },
 
-  fetch(req) {
-    return new Response("Not Found", { status: 404 });
-  },
+  fetch: GraphqlHandler,
 });
 
 console.error(`Server running at ${server.url}`);
