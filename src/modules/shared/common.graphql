@@ -1,0 +1,8 @@
+type PageInfo {
+  count: Int
+  offset: Int
+  limit: Int
+}
+
+scalar Date
+scalar File

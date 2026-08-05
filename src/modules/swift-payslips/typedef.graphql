@@ -1,0 +1,52 @@
+type PayslipLineItem {
+  label: String
+  amount: Float
+}
+
+enum PayslipType {
+  Salary
+  Bonus
+}
+
+type Payslip {
+  id: Int
+
+  employee_id: Int
+  period: String
+  earnings: [PayslipLineItem]
+  deductions: [PayslipLineItem]
+  employer_contributions: [PayslipLineItem]
+  gross_pay_cents: Int
+  nett_pay_cents: Int
+  year_to_date: [PayslipLineItem]
+  hash: String
+  path: String
+  created_at: Date
+  updated_at: Date
+
+  period_key: Int
+  type: PayslipType
+}
+
+type PaySlips {
+  rows: [Payslip]
+  pageInfo: PageInfo
+}
+
+input PayslipQueryInput {
+  employee_numbers: [String]
+  period_from: String #YYYYMM
+  period_to: String #YYYYMM
+  types: [PayslipType]
+  limit: Int
+  offset: Int
+}
+
+type Query {
+  payslip(id: Int!): Payslip
+  payslips(query: PayslipQueryInput): PaySlips
+}
+
+type Mutation {
+  uploadPayslips(files: [File], password: String): Payslip
+}
